@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de Informes de Climatización</title>
+    <meta name="description" content="Biblioteca central de informes de equipos de clima.">
+    <style>
+/* Variables Globales y Esquema de Colores */
+:root {
+    --bg-color: #0f172a; /* Slate 900 */
+    --panel-bg: rgba(30, 41, 59, 0.7); /* Slate 800 transparente */
+    --panel-border: rgba(255, 255, 255, 0.1);
+    --text-primary: #f8fafc; /* Slate 50 */
+    --text-secondary: #94a3b8; /* Slate 400 */
+    --accent-color: #3b82f6; /* Blue 500 */
+    --accent-hover: #2563eb; /* Blue 600 */
+    --error-color: #ef4444; /* Red 500 */
+    --selection-bg: rgba(59, 130, 246, 0.15);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color);
+    background-image: 
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+    background-size: cover;
+    background-attachment: fixed;
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    overflow: hidden;
+}
+
+/* --- Clases de Utilidad y Diseño Glassmorphism --- */
+.glass-panel {
+    background: var(--panel-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.hidden { display: none !important; }
+.active { display: flex !important; }
+
+/* --- Pantalla de Inicio de Sesión --- */
+#login-container {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    top: 0; left: 0;
+    z-index: 10;
+}
+
+.login-card {
+    padding: 3.5rem;
+    border-radius: 24px;
+    text-align: center;
+    width: 90%;
+    max-width: 420px;
+    animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.login-card .logo {
+    font-size: 3.5rem;
+    color: var(--accent-color);
+    margin-bottom: 1.5rem;
+    animation: pulse 2s infinite ease-in-out;
+}
+
+.login-card h2 { margin-bottom: 0.5rem; font-weight: 600; font-size: 1.5rem;}
+.login-card p { color: var(--text-secondary); margin-bottom: 2.5rem; font-size: 0.95rem; }
+
+.pin-input-group {
+    margin-bottom: 1.5rem;
+}
+
+#pin-input {
+    width: 100%;
+    padding: 1.25rem;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--panel-border);
+    color: var(--text-primary);
+    font-size: 1.75rem;
+    text-align: center;
+    letter-spacing: 0.75rem;
+    transition: all 0.3s ease;
+}
+
+#pin-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+    background: rgba(0,0,0,0.4);
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 1.1rem;
+    border-radius: 12px;
+    background: var(--accent-color);
+    border: none;
+    color: white;
+    font-weight: 600;
+    font-size: 1.05rem;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.1s;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:active { transform: scale(0.97); }
+
+.error {
+    color: var(--error-color);
+    margin-top: 1.25rem;
+    font-size: 0.9rem;
+    animation: shake 0.4s;
+    font-weight: 500;
+}
+
+/* --- Layout Principal de la App --- */
+#app-container {
+    width: 100%;
+    height: 100vh;
+    padding: 1.5rem;
+    gap: 1.5rem;
+    animation: fadeIn 0.4s ease-out;
+}
+
+/* Sidebar Navigation */
+.sidebar {
+    width: 320px;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.sidebar-header {
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    border-bottom: 1px solid var(--panel-border);
+    font-size: 1.35rem;
+    font-weight: 600;
+    background: rgba(0,0,0,0.1);
+}
+
+.sidebar-header i { color: var(--accent-color); }
+
+.nav-tree {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem 0;
+}
+
+.nav-tree::-webkit-scrollbar { width: 6px; }
+.nav-tree::-webkit-scrollbar-track { background: transparent; }
+.nav-tree::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+.nav-tree::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+/* Tree Interaction */
+.tree-node {
+    list-style: none;
+}
+
+.tree-item {
+    padding: 0.8rem 1.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.tree-item:hover {
+    background: rgba(255,255,255,0.05);
+    color: var(--text-primary);
+}
+
+.tree-item.selected {
+    background: var(--selection-bg);
+    color: var(--accent-color);
+    border-left: 4px solid var(--accent-color);
+}
+
+.tree-item i { width: 1.2rem; text-align: center; font-size: 0.95rem; }
+.tree-item .chevron { transition: transform 0.2s; }
+
+.tree-children {
+    display: none;
+    padding-left: 1.5rem;
+}
+
+.tree-children.open { display: block; animation: slideDown 0.3s ease-out; }
+
+.sidebar-footer {
+    padding: 1.2rem;
+    border-top: 1px solid var(--panel-border);
+    background: rgba(0,0,0,0.1);
+}
+
+.btn-secondary {
+    width: 100%;
+    padding: 0.85rem;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.btn-secondary:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.2);
+}
+
+/* Contenido Principal (Visor) */
+.main-content {
+    flex: 1;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.content-header {
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,0.1);
+}
+
+.content-header h2 { font-weight: 500; font-size: 1.35rem; color: var(--text-primary); }
+
+.report-actions { display: flex; gap: 1rem; }
+
+.btn-icon {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1.35rem;
+    transition: color 0.2s, transform 0.2s;
+}
+
+.btn-icon:hover:not(:disabled) { color: var(--text-primary); transform: scale(1.1); }
+.btn-icon:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.report-viewer {
+    flex: 1;
+    position: relative;
+    background: rgba(0,0,0,0.3); /* Contraste interior oscuro */
+}
+
+#placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 2rem;
+}
+
+#report-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background-color: #ffffff; /* Los HTML reportes suelen estar diseñados en modo claro */
+    animation: fadeIn 0.3s;
+}
+
+/* Animaciones y Efectos */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(0.95); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+}
+
+/* Estilos para Botón Link y Panel Avanzado */
+.btn-link {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    text-decoration: underline;
+    transition: color 0.3s;
+}
+.btn-link:hover { color: var(--accent-color); }
+
+.upload-zone {
+    border: 2px dashed var(--panel-border);
+    border-radius: 16px;
+    padding: 3rem;
+    text-align: center;
+    background: rgba(0,0,0,0.15);
+    transition: all 0.3s;
+    width: 100%;
+    max-width: 650px;
+}
+.upload-zone:hover {
+    border-color: var(--accent-color);
+    background: rgba(59, 130, 246, 0.05);
+}
+
+/* Responsividad (Móviles) */
+@media (max-width: 860px) {
+    #app-container, #admin-container { flex-direction: column; padding: 1rem; gap: 1rem; }
+    .sidebar { width: 100%; height: 35vh; min-height: 250px; }
+    .main-content { flex: 1; }
+    .content-header h2 { font-size: 1.15rem; }
+    .login-card { padding: 2.5rem 1.5rem; }
+}
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome para iconos -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Pantalla de Inicio de Sesión -->
+    <div id="login-container" class="active">
+        <div class="login-card glass-panel">
+            <div class="logo">
+                <i class="fa-solid fa-snowflake"></i>
+            </div>
+            <h2>Acceso a Informes</h2>
+            <p>Ingresa tu PIN de seguridad para continuar</p>
+            <div class="pin-input-group">
+                <input type="password" id="pin-input" placeholder="••••" maxlength="6" autocomplete="off">
+            </div>
+            <button id="login-btn" class="btn-primary">Acceder</button>
+            <p id="error-msg" class="error hidden">PIN incorrecto. Intenta nuevamente.</p>
+            <button id="toggle-advanced-btn" class="btn-link">Acceso Avanzado</button>
+        </div>
+    </div>
+
+    <!-- Pantalla Principal de la Aplicación -->
+    <div id="app-container" class="hidden">
+        <!-- Barra Lateral de Navegación -->
+        <aside class="sidebar glass-panel">
+            <div class="sidebar-header">
+                <i class="fa-solid fa-folder-tree"></i>
+                <h3>Biblioteca</h3>
+            </div>
+            <nav id="navigation-tree" class="nav-tree">
+                <!-- El contenido del árbol se genera dinámicamente con JavaScript -->
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logout-btn" class="btn-secondary"><i class="fa-solid fa-sign-out-alt"></i> Cerrar Sesión</button>
+            </div>
+        </aside>
+
+        <!-- Visor de Documentos -->
+        <main class="main-content glass-panel">
+            <header class="content-header">
+                <h2 id="current-report-title">Selecciona un informe del menú</h2>
+                <div class="report-actions">
+                    <button id="open-new-tab" class="btn-icon" title="Abrir en pestaña nueva" disabled>
+                        <i class="fa-solid fa-external-link-alt"></i>
+                    </button>
+                </div>
+            </header>
+            <div class="report-viewer">
+                <!-- Estado vacío inicialmente -->
+                <div id="placeholder" class="placeholder-active">
+                    <i class="fa-regular fa-file-code fa-3x" style="margin-bottom: 1rem; color: #3b82f6;"></i>
+                    <p>Navega por las categorías en el panel izquierdo para localizar y abrir los informes HTML de los trimestres.</p>
+                </div>
+                <!-- Visor integrado iframe -->
+                <iframe id="report-frame" src="" class="hidden" title="Visor de Informe"></iframe>
+            </div>
+        </main>
+    </div>
+
+    <!-- Panel de Administración Avanzado -->
+    <div id="admin-container" class="hidden" style="width: 100%; height: 100vh; padding: 1.5rem; gap: 1.5rem;">
+        <aside class="sidebar glass-panel">
+            <div class="sidebar-header">
+                <i class="fa-solid fa-shield-halved"></i>
+                <h3>Panel Avanzado</h3>
+            </div>
+            <nav id="admin-navigation-tree" class="nav-tree">
+                <!-- Se llenará dinámicamente con JS (Árbol de directorios) -->
+            </nav>
+            <div class="sidebar-footer">
+                <button id="admin-logout-btn" class="btn-secondary"><i class="fa-solid fa-sign-out-alt"></i> Cerrar Sesión</button>
+            </div>
+        </aside>
+
+        <main class="main-content glass-panel" style="flex: 1; display: flex; flex-direction: column; border-radius: 20px;">
+            <header class="content-header" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                <h2>Selecciona un directorio del menú lateral</h2>
+                <p class="path-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Para cargar el informe asociado.</p>
+            </header>
+            <div class="report-viewer" style="display: flex; justify-content: center; align-items: center; padding: 2rem; flex: 1;">
+                <div class="upload-zone" id="upload-zone">
+                    <i class="fa-solid fa-cloud-arrow-up fa-4x" style="color: var(--accent-color); margin-bottom: 1.5rem;"></i>
+                    <h3>Sube nuevos informes a la plataforma</h3>
+                    <p style="color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 2rem;">Arrastra aquí los archivos HTML y carpetas de informes nuevos o haz clic para buscar.</p>
+                    <input type="file" id="file-upload" multiple class="hidden" accept=".html">
+                    <button class="btn-primary" style="width: auto; padding: 0.8rem 2rem;" onclick="document.getElementById('file-upload').click()">
+                        <i class="fa-solid fa-folder-open" style="margin-right: 0.5rem;"></i>Examinar Mi Equipo
+                    </button>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 1.5rem; padding: 0 1rem;">
+                        <i class="fa-solid fa-circle-info"></i> Nota: Para cargar a Google Drive directamente desde este panel web, se requerirá de la integración con Google Apps Script (Siguiente fase del proyecto).
+                    </p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Script Principal -->
+    <script>
+/**
+ * Visor de Informes de Climatización - Lógica Principal
+ */
+
+// Configuración del PIN de acceso
+const MASTER_PIN = "1234";
+const ADMIN_PIN = "8964";
+
+// Estructura de navegación solicitada
+const DATA_TREE = [
+    {
+        name: "Casa Matriz (14 de la fama)",
+        type: "location",
+        children: [
+            {
+                name: "2026",
+                type: "year",
+                children: [
+                    { name: "Trimestre 1", type: "report", path: "Casa Matriz (14 de la fama)/2026/Trimestre 1/informe.html" },
+                    { name: "Trimestre 2", type: "report", path: "Casa Matriz (14 de la fama)/2026/Trimestre 2/informe.html" }
+                ]
+            }
+        ]
+    },
+    {
+        name: "Planta Industrial (La vara)",
+        type: "location",
+        children: [
+            {
+                name: "2026",
+                type: "year",
+                children: [
+                    { name: "Trimestre 1", type: "report", path: "Planta Industrial (La vara)/2026/Trimestre 1/informe.html" },
+                    { name: "Trimestre 2", type: "report", path: "Planta Industrial (La vara)/2026/Trimestre 2/informe.html" }
+                ]
+            }
+        ]
+    },
+    {
+        name: "Rancagua",
+        type: "location",
+        children: [
+            {
+                name: "2026",
+                type: "year",
+                children: [
+                    { name: "Trimestre 1", type: "report", path: "Rancagua/2026/Trimestre 1/informe.html" },
+                    { name: "Trimestre 2", type: "report", path: "Rancagua/2026/Trimestre 2/informe.html" }
+                ]
+            }
+        ]
+    },
+    {
+        name: "Viña del Mar",
+        type: "location",
+        children: [
+            {
+                name: "2026",
+                type: "year",
+                children: [
+                    { name: "Trimestre 1", type: "report", path: "Viña del Mar/2026/Trimestre 1/informe.html" },
+                    { name: "Trimestre 2", type: "report", path: "Viña del Mar/2026/Trimestre 2/informe.html" }
+                ]
+            }
+        ]
+    },
+    {
+        name: "La Vara 3310",
+        type: "location",
+        children: [
+            {
+                name: "2026",
+                type: "year",
+                children: [
+                    { name: "Trimestre 1", type: "report", path: "La Vara 3310/2026/Trimestre 1/informe.html" },
+                    { name: "Trimestre 2", type: "report", path: "La Vara 3310/2026/Trimestre 2/informe.html" }
+                ]
+            }
+        ]
+    }
+];
+
+// Referencias a elementos del DOM
+const loginContainer = document.getElementById('login-container');
+const appContainer = document.getElementById('app-container');
+const pinInput = document.getElementById('pin-input');
+const loginBtn = document.getElementById('login-btn');
+const errorMsg = document.getElementById('error-msg');
+const logoutBtn = document.getElementById('logout-btn');
+const navTree = document.getElementById('navigation-tree');
+const iframe = document.getElementById('report-frame');
+const placeholder = document.getElementById('placeholder');
+const currentReportTitle = document.getElementById('current-report-title');
+const openNewTabBtn = document.getElementById('open-new-tab');
+
+// Panel Avanzado
+const adminContainer = document.getElementById('admin-container');
+const adminNavTree = document.getElementById('admin-navigation-tree');
+const toggleAdvancedBtn = document.getElementById('toggle-advanced-btn');
+const adminLogoutBtn = document.getElementById('admin-logout-btn');
+
+// Variable de estado de la aplicación
+let currentReportPath = null;
+let isAdvancedMode = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Verificar si hay una sesión activa para saltar el login
+    if (sessionStorage.getItem('authenticated') === 'true') {
+        showApp();
+    } else if (sessionStorage.getItem('admin_authenticated') === 'true') {
+        showAdminApp();
+    }
+
+    // Alternar modo avanzado
+    toggleAdvancedBtn.addEventListener('click', () => {
+        isAdvancedMode = !isAdvancedMode;
+        if (isAdvancedMode) {
+            document.querySelector('.login-card h2').textContent = "Acceso Avanzado";
+            document.querySelector('.login-card p').textContent = "Ingresa el PIN de administrador para continuar";
+            toggleAdvancedBtn.textContent = "Volver al visor de informes normal";
+            pinInput.value = '';
+        } else {
+            document.querySelector('.login-card h2').textContent = "Acceso a Informes";
+            document.querySelector('.login-card p').textContent = "Ingresa tu PIN de seguridad para continuar";
+            toggleAdvancedBtn.textContent = "Acceso Avanzado";
+            pinInput.value = '';
+        }
+    });
+
+    // Configurar eventos
+    loginBtn.addEventListener('click', handleAuthentication);
+    
+    // Permitir acceso apretando 'Enter' en el PIN
+    pinInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            handleAuthentication();
+        }
+    });
+
+    logoutBtn.addEventListener('click', handleLogout);
+    adminLogoutBtn.addEventListener('click', handleLogout);
+
+    openNewTabBtn.addEventListener('click', () => {
+        if (currentReportPath) {
+            window.open(currentReportPath, '_blank');
+        }
+    });
+
+    // Construir el árbol de navegación visual en el DOM
+    renderTree(DATA_TREE, navTree, loadHtmlReport);
+    renderTree(DATA_TREE, adminNavTree, loadAdminReportForm);
+    
+    // Enfocar automáticamente el input de PIN para comodidad
+    if(loginContainer.classList.contains('active')) {
+        pinInput.focus();
+    }
+});
+
+/**
+ * Verifica las credenciales introducidas
+ */
+function handleAuthentication() {
+    const pin = pinInput.value.trim();
+    
+    if (isAdvancedMode) {
+        if (pin === ADMIN_PIN) {
+            sessionStorage.setItem('admin_authenticated', 'true');
+            showAdminApp();
+        } else {
+            showError();
+        }
+    } else {
+        if (pin === MASTER_PIN) {
+            sessionStorage.setItem('authenticated', 'true');
+            showApp();
+        } else {
+            showError();
+        }
+    }
+}
+
+/**
+ * Muestra el panel de administración
+ */
+function showAdminApp() {
+    loginContainer.classList.remove('active');
+    loginContainer.classList.add('hidden');
+    appContainer.classList.add('hidden');
+    appContainer.classList.remove('active');
+    
+    adminContainer.classList.remove('hidden');
+    adminContainer.classList.add('active');
+    
+    pinInput.value = '';
+}
+
+/**
+ * Muestra el panel principal de la app y esconde el login
+ */
+function showApp() {
+    loginContainer.classList.remove('active');
+    loginContainer.classList.add('hidden');
+    appContainer.classList.remove('hidden');
+    appContainer.classList.add('active');
+    pinInput.value = '';
+}
+
+/**
+ * Restaura el estado cerrando sesión y volviendo al login
+ */
+function handleLogout() {
+    sessionStorage.removeItem('authenticated');
+    sessionStorage.removeItem('admin_authenticated');
+    
+    appContainer.classList.remove('active');
+    appContainer.classList.add('hidden');
+    
+    adminContainer.classList.remove('active');
+    adminContainer.classList.add('hidden');
+    
+    loginContainer.classList.remove('hidden');
+    loginContainer.classList.add('active');
+    
+    // Limpiar estado del visor al salir
+    iframe.src = '';
+    iframe.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    currentReportTitle.textContent = 'Selecciona un informe del menú';
+    openNewTabBtn.disabled = true;
+    currentReportPath = null;
+    
+    document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('selected'));
+    
+    pinInput.focus();
+}
+
+/**
+ * Muestra mensaje de error temporal en PIN incorrecto
+ */
+function showError() {
+    errorMsg.classList.remove('hidden');
+    pinInput.value = '';
+    setTimeout(() => {
+        errorMsg.classList.add('hidden');
+    }, 3500);
+}
+
+/**
+ * Renderiza recursivamente los nodos del árbol en el contenedor especificado
+ */
+function renderTree(nodes, parentElement, onLeafClick) {
+    const ul = document.createElement('ul');
+    ul.className = 'tree-node';
+
+    nodes.forEach(node => {
+        const li = document.createElement('li');
+        
+        // Contenedor principal del item (etiqueta con ícono y texto)
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'tree-item';
+        
+        // Selección de ícono para embellecer la UI según tipo de nodo
+        const icon = document.createElement('i');
+        if (node.type === 'location') {
+            icon.className = 'fa-solid fa-building';
+            icon.style.color = '#3b82f6'; // Azul
+        } else if (node.type === 'year') {
+            icon.className = 'fa-solid fa-calendar-days';
+            icon.style.color = '#8b5cf6'; // Morado
+        } else {
+            icon.className = 'fa-solid fa-code'; // Icono de HTML
+            icon.style.color = '#10b981'; // Verde
+        }
+        
+        const text = document.createElement('span');
+        text.textContent = node.name;
+        
+        itemDiv.appendChild(icon);
+        itemDiv.appendChild(text);
+        
+        // Si el nodo actual es una carpeta (tiene hijos)
+        if (node.children && node.children.length > 0) {
+            const chevron = document.createElement('i');
+            chevron.className = 'fa-solid fa-chevron-right chevron';
+            chevron.style.marginLeft = 'auto'; // Empujar al lado derecho
+            chevron.style.fontSize = '0.75rem';
+            chevron.style.opacity = '0.7';
+            itemDiv.appendChild(chevron);
+            
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'tree-children';
+            
+            // Animación al abrir y cerrar
+            itemDiv.addEventListener('click', () => {
+                const isOpen = childrenContainer.classList.contains('open');
+                if (isOpen) {
+                    childrenContainer.classList.remove('open');
+                    chevron.className = 'fa-solid fa-chevron-right chevron';
+                } else {
+                    childrenContainer.classList.add('open');
+                    chevron.className = 'fa-solid fa-chevron-down chevron';
+                }
+            });
+            
+            li.appendChild(itemDiv);
+            renderTree(node.children, childrenContainer);
+            li.appendChild(childrenContainer);
+        } else {
+            // Es un archivo/informe final, se ejecuta el callback correspondiente
+            itemDiv.addEventListener('click', () => {
+                // Eliminar selección global para evitar confusiones
+                document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('selected'));
+                itemDiv.classList.add('selected');
+                
+                if (onLeafClick) onLeafClick(node);
+            });
+            li.appendChild(itemDiv);
+        }
+        
+        ul.appendChild(li);
+    });
+
+    parentElement.appendChild(ul);
+}
+
+/**
+ * Carga la vista de administrador para subir el reporte de un nodo específico
+ */
+function loadAdminReportForm(node) {
+    currentReportPath = node.path;
+    
+    // Modificar título del UI
+    const adminHeader = document.querySelector('#admin-container .content-header h2');
+    if (adminHeader) adminHeader.textContent = "Cargar Informe: " + node.name;
+    
+    const adminHeaderPath = document.querySelector('#admin-container .content-header p.path-subtitle');
+    if(adminHeaderPath) adminHeaderPath.textContent = "Ruta de subida: " + node.path;
+}
+
+/**
+ * Carga el archivo HTML respectivo en el marco de visualización
+ */
+function loadHtmlReport(node) {
+    currentReportPath = node.path;
+    
+    // Actualizar Encabezado UI
+    currentReportTitle.textContent = "Visualizando: " + node.name;
+    
+    // Intercambiar marcador de posición por el iframe real
+    placeholder.classList.add('hidden');
+    iframe.classList.remove('hidden');
+    
+    // Definir la ruta relativa hacia el informe generado
+    iframe.src = node.path;
+    
+    // Permitir apertura en nueva pestaña completa
+    openNewTabBtn.disabled = false;
+}
+    </script>
+</body>
+</html>
