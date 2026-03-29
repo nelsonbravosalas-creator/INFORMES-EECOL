@@ -297,6 +297,39 @@ body {
     animation: fadeIn 0.3s;
 }
 
+#pdf-action-view {
+    position: absolute;
+    inset: 0;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(15, 23, 42, 0.95);
+    border: 2px dashed rgba(239, 68, 68, 0.4);
+    border-radius: 12px;
+    margin: 1.5rem;
+    animation: fadeIn 0.4s ease-out;
+}
+
+#extract-pdf-btn {
+    width: auto; 
+    padding: 1rem 3rem; 
+    border-radius: 4px; 
+    border: 1px solid var(--error-color); 
+    background: rgba(239, 68, 68, 0.1); 
+    color: var(--error-color); 
+    font-family: monospace; 
+    letter-spacing: 2px; 
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+#extract-pdf-btn:hover {
+    background: var(--error-color);
+    color: white;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+}
+
 /* Animaciones y Efectos */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
@@ -417,6 +450,16 @@ body {
                 </div>
                 <!-- Visor integrado iframe -->
                 <iframe id="report-frame" src="" class="hidden" title="Visor de Informe"></iframe>
+                
+                <!-- Panel PDF Inmersivo -->
+                <div id="pdf-action-view" class="hidden">
+                    <i class="fa-solid fa-file-pdf fa-4x" style="color: var(--error-color); margin-bottom: 1.5rem;"></i>
+                    <h3 style="margin-bottom: 0.5rem; color: var(--error-color); font-family: monospace; font-size: 1.5rem; letter-spacing: 1px;">SISTEMA: DOCUMENTO PDF PROTEGIDO</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 2.5rem; max-width: 450px; text-align: center; font-size: 0.95rem; line-height: 1.5;">El archivo detectado requiere ser extraído al visor nativo de tu sistema para garantizar un renderizado fluido y permitir la manipulación táctil (zoom).</p>
+                    <button id="extract-pdf-btn">
+                        <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right: 0.75rem;"></i> INICIAR EXTRACCIÓN
+                    </button>
+                </div>
             </div>
         </main>
     </div>
@@ -515,6 +558,8 @@ const iframe = document.getElementById('report-frame');
 const placeholder = document.getElementById('placeholder');
 const currentReportTitle = document.getElementById('current-report-title');
 const openNewTabBtn = document.getElementById('open-new-tab');
+const pdfActionView = document.getElementById('pdf-action-view');
+const extractPdfBtn = document.getElementById('extract-pdf-btn');
 
 // Variable de estado de la aplicación
 let currentReportPath = null;
@@ -544,6 +589,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sessionStorage.getItem('authenticated') === 'true') {
         showApp();
     }
+
+    extractPdfBtn.addEventListener('click', () => {
+        if (currentReportPath) {
+            window.open(currentReportPath, '_blank');
+        }
+    });
 
     // Configurar eventos
     loginBtn.addEventListener('click', handleAuthentication);
@@ -722,7 +773,7 @@ function renderTree(nodes, parentElement, onLeafClick) {
             });
             
             li.appendChild(itemDiv);
-            renderTree(node.children, childrenContainer);
+            renderTree(node.children, childrenContainer, onLeafClick);
             li.appendChild(childrenContainer);
         } else {
             // Es un archivo/informe final, se ejecuta el callback correspondiente
@@ -745,23 +796,33 @@ function renderTree(nodes, parentElement, onLeafClick) {
 
 
 /**
- * Carga el archivo HTML respectivo en el marco de visualización
+ * Carga el archivo respectivo en el marco de visualización
  */
+function hideAllViews() {
+    placeholder.classList.add('hidden');
+    iframe.classList.add('hidden');
+    pdfActionView.classList.remove('active');
+    pdfActionView.classList.add('hidden');
+}
+
 function loadHtmlReport(node) {
     currentReportPath = node.path;
     
     // Actualizar Encabezado UI
     currentReportTitle.textContent = "Visualizando: " + node.name;
-    
-    // Intercambiar marcador de posición por el iframe real
-    placeholder.classList.add('hidden');
-    iframe.classList.remove('hidden');
-    
-    // Cargar la ruta directamente para HTML y PDF (el navegador usará su visor nativo para ambos)
-    iframe.src = node.path;
-    
-    // Permitir apertura en nueva pestaña completa
     openNewTabBtn.disabled = false;
+    
+    hideAllViews();
+    
+    if (node.type === 'report-pdf') {
+        // Modo PDF - Panel Inmersivo
+        pdfActionView.classList.remove('hidden');
+        pdfActionView.classList.add('active');
+    } else {
+        // Modo HTML - Iframe nativo
+        iframe.src = node.path;
+        iframe.classList.remove('hidden');
+    }
     
     if (window.innerWidth <= 860) {
         document.querySelector('#app-container .sidebar').classList.add('mobile-collapsed');
