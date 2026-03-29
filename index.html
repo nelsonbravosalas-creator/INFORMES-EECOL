@@ -382,7 +382,6 @@ body {
             </div>
             <button id="login-btn" class="btn-primary">Acceder</button>
             <p id="error-msg" class="error hidden">PIN incorrecto. Intenta nuevamente.</p>
-            <button id="toggle-advanced-btn" class="btn-link">Acceso Avanzado</button>
         </div>
     </div>
 
@@ -422,40 +421,7 @@ body {
         </main>
     </div>
 
-    <!-- Panel de Administración Avanzado -->
-    <div id="admin-container" class="hidden" style="width: 100%; height: 100vh; padding: 1.5rem; gap: 1.5rem;">
-        <aside class="sidebar glass-panel">
-            <div class="sidebar-header">
-                <i class="fa-solid fa-shield-halved"></i>
-                <h3>Panel Avanzado</h3>
-            </div>
-            <nav id="admin-navigation-tree" class="nav-tree">
-                <!-- Se llenará dinámicamente con JS (Árbol de directorios) -->
-            </nav>
-            <!-- Botón de logout eliminado -->
-        </aside>
 
-        <main class="main-content glass-panel" style="flex: 1; display: flex; flex-direction: column; border-radius: 20px;">
-            <header class="content-header" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
-                <h2>Selecciona un directorio del menú lateral</h2>
-                <p class="path-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Para cargar el informe asociado.</p>
-            </header>
-            <div class="report-viewer" style="display: flex; justify-content: center; align-items: center; padding: 2rem; flex: 1;">
-                <div class="upload-zone" id="upload-zone">
-                    <i class="fa-solid fa-cloud-arrow-up fa-4x" style="color: var(--accent-color); margin-bottom: 1.5rem;"></i>
-                    <h3>Sube nuevos informes a la plataforma</h3>
-                    <p style="color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 2rem;">Arrastra aquí los archivos HTML o PDF y carpetas de informes nuevos o haz clic para buscar.</p>
-                    <input type="file" id="file-upload" multiple class="hidden" accept=".html,.pdf">
-                    <button class="btn-primary" style="width: auto; padding: 0.8rem 2rem;" onclick="document.getElementById('file-upload').click()">
-                        <i class="fa-solid fa-folder-open" style="margin-right: 0.5rem;"></i>Examinar Mi Equipo
-                    </button>
-                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 1.5rem; padding: 0 1rem;">
-                        <i class="fa-solid fa-circle-info"></i> Nota: Para cargar a Google Drive directamente desde este panel web, se requerirá de la integración con Google Apps Script (Siguiente fase del proyecto).
-                    </p>
-                </div>
-            </div>
-        </main>
-    </div>
 
     <!-- Script Principal -->
     <script>
@@ -465,9 +431,6 @@ body {
 
 // Configuración del PIN de acceso
 const MASTER_PIN = "1234";
-const ADMIN_PIN = "8964";
-
-// Estructura de navegación solicitada
 // Estructura de navegación dinámica
 let DATA_TREE = [];
 
@@ -476,52 +439,65 @@ const REPO_NAME = "INFORMES-EECOL";
 const GITHUB_PAGES_BASE = `https://${REPO_OWNER}.github.io/${REPO_NAME}/`;
 
 /**
- * Función que obtiene recursivamente el árbol de archivos desde GitHub API.
+ * Función que obtiene todo el árbol de archivos desde GitHub API en una sola consulta.
  */
-async function buildDynamicTree(url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/`, depth = 1) {
+async function buildDynamicTree() {
     try {
+        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/git/trees/main?recursive=1`;
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
         const data = await response.json();
         
-        let nodes = [];
+        const root = { children: [] };
         
-        // Ordenar: Directorios primero, luego archivos
-        data.sort((a, b) => {
-            if (a.type === b.type) return a.name.localeCompare(b.name);
-            return a.type === "dir" ? -1 : 1;
-        });
-
-        for (const item of data) {
-            // Ignorar archivos que no interesan en la raíz
-            if (depth === 1 && (item.name.toLowerCase() === "index.html" || item.name.toLowerCase() === "readme.md" || item.name.startsWith("."))) {
-                continue;
-            }
-
-            if (item.type === "dir") {
-                // Fetch recursivo para obtener el contenido de la subcarpeta
-                const children = await buildDynamicTree(item.url, depth + 1);
+        data.tree.forEach(item => {
+            if (item.path.startsWith('.') || item.path.toLowerCase() === 'index.html' || item.path.toLowerCase() === 'readme.md') return;
+            
+            if (item.type === "blob" && (item.path.toLowerCase().endsWith(".html") || item.path.toLowerCase().endsWith(".pdf"))) {
+                const parts = item.path.split('/');
+                let currentLevel = root.children;
                 
-                // Mapear solo las carpetas que contengan archivos válidos en su interior
-                if (children.length > 0) {
-                    nodes.push({
-                        name: item.name,
-                        type: depth === 1 ? "location" : "year",
-                        children: children,
-                        path: item.path
-                    });
+                for (let i = 0; i < parts.length; i++) {
+                    const isLast = i === parts.length - 1;
+                    const partName = parts[i];
+                    
+                    if (isLast) {
+                        const isPdf = partName.toLowerCase().endsWith(".pdf");
+                        const encodedPath = item.path.split('/').map(encodeURIComponent).join('/');
+                        currentLevel.push({
+                            name: partName.replace(/\.(html|pdf)$/i, ''),
+                            type: isPdf ? "report-pdf" : "report-html",
+                            path: GITHUB_PAGES_BASE + encodedPath
+                        });
+                    } else {
+                        let dirNode = currentLevel.find(n => n.name === partName);
+                        if (!dirNode) {
+                            dirNode = {
+                                name: partName,
+                                type: i === 0 ? "location" : "year",
+                                children: []
+                            };
+                            currentLevel.push(dirNode);
+                        }
+                        currentLevel = dirNode.children;
+                    }
                 }
-            } else if (item.type === "file" && (item.name.toLowerCase().endsWith(".html") || item.name.toLowerCase().endsWith(".pdf"))) {
-                const isPdf = item.name.toLowerCase().endsWith(".pdf");
-                const encodedPath = item.path.split('/').map(encodeURIComponent).join('/');
-                nodes.push({
-                    name: item.name.replace(/\.(html|pdf)$/i, ''),
-                    type: isPdf ? "report-pdf" : "report-html",
-                    path: GITHUB_PAGES_BASE + encodedPath // Ruta absoluta para evitar 404 por rutas relativas
-                });
             }
-        }
-        return nodes;
+        });
+        
+        // Ordenar nodos alfabéticamente priorizando carpetas
+        const sortTree = (nodes) => {
+            nodes.sort((a, b) => {
+                if(a.children && !b.children) return -1;
+                if(!a.children && b.children) return 1;
+                return a.name.localeCompare(b.name);
+            });
+            nodes.forEach(n => { if (n.children) sortTree(n.children); });
+        };
+        
+        sortTree(root.children);
+        return root.children;
+        
     } catch (error) {
         console.error("Error explorando repositorio GitHub:", error);
         return [];
@@ -540,14 +516,8 @@ const placeholder = document.getElementById('placeholder');
 const currentReportTitle = document.getElementById('current-report-title');
 const openNewTabBtn = document.getElementById('open-new-tab');
 
-// Panel Avanzado
-const adminContainer = document.getElementById('admin-container');
-const adminNavTree = document.getElementById('admin-navigation-tree');
-const toggleAdvancedBtn = document.getElementById('toggle-advanced-btn');
-
 // Variable de estado de la aplicación
 let currentReportPath = null;
-let isAdvancedMode = false;
 
 // Configuración y variables del temporizador de inactividad
 let inactivityTimer;
@@ -555,10 +525,11 @@ const INACTIVITY_TIME_LIMIT = 10 * 60 * 1000; // 10 minutos
 
 function resetInactivityTimer() {
     clearTimeout(inactivityTimer);
-    if (sessionStorage.getItem('authenticated') === 'true' || sessionStorage.getItem('admin_authenticated') === 'true') {
+    if (sessionStorage.getItem('authenticated') === 'true') {
         inactivityTimer = setTimeout(() => {
             handleLogout();
-            alert('Tu sesión ha expirado por inactividad.');
+            errorMsg.textContent = 'Tu sesión ha expirado por inactividad.';
+            errorMsg.classList.remove('hidden');
         }, INACTIVITY_TIME_LIMIT);
     }
 }
@@ -572,25 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Verificar si hay una sesión activa para saltar el login
     if (sessionStorage.getItem('authenticated') === 'true') {
         showApp();
-    } else if (sessionStorage.getItem('admin_authenticated') === 'true') {
-        showAdminApp();
     }
-
-    // Alternar modo avanzado
-    toggleAdvancedBtn.addEventListener('click', () => {
-        isAdvancedMode = !isAdvancedMode;
-        if (isAdvancedMode) {
-            document.querySelector('.login-card h2').textContent = "Acceso Avanzado";
-            document.querySelector('.login-card p').textContent = "Ingresa el PIN de administrador para continuar";
-            toggleAdvancedBtn.textContent = "Volver al visor de informes normal";
-            pinInput.value = '';
-        } else {
-            document.querySelector('.login-card h2').textContent = "Acceso a Informes";
-            document.querySelector('.login-card p').textContent = "Ingresa tu PIN de seguridad para continuar";
-            toggleAdvancedBtn.textContent = "Acceso Avanzado";
-            pinInput.value = '';
-        }
-    });
 
     // Configurar eventos
     loginBtn.addEventListener('click', handleAuthentication);
@@ -632,21 +585,17 @@ document.addEventListener('DOMContentLoaded', () => {
 async function initDynamicTree() {
     // Mostrar indicadores de carga
     navTree.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; margin-bottom: 1rem; color: var(--accent-color);"></i><br>Consultando repositorio...</div>';
-    adminNavTree.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; margin-bottom: 1rem; color: var(--accent-color);"></i><br>Consultando repositorio...</div>';
     
     DATA_TREE = await buildDynamicTree();
     
     // Limpiar vista
     navTree.innerHTML = '';
-    adminNavTree.innerHTML = '';
     
     if (DATA_TREE.length === 0) {
         navTree.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--error-color);"><i class="fa-solid fa-triangle-exclamation"></i> No se encontraron informes o hubo un error de red.</div>';
-        adminNavTree.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--error-color);"><i class="fa-solid fa-triangle-exclamation"></i> Error al cargar los datos del repositorio.</div>';
     } else {
         // Construir el árbol de navegación visual en el DOM
         renderTree(DATA_TREE, navTree, loadHtmlReport);
-        renderTree(DATA_TREE, adminNavTree, loadAdminReportForm);
     }
 }
 
@@ -656,37 +605,12 @@ async function initDynamicTree() {
 function handleAuthentication() {
     const pin = pinInput.value.trim();
     
-    if (isAdvancedMode) {
-        if (pin === ADMIN_PIN) {
-            sessionStorage.setItem('admin_authenticated', 'true');
-            showAdminApp();
-        } else {
-            showError();
-        }
+    if (pin === MASTER_PIN) {
+        sessionStorage.setItem('authenticated', 'true');
+        showApp();
     } else {
-        if (pin === MASTER_PIN) {
-            sessionStorage.setItem('authenticated', 'true');
-            showApp();
-        } else {
-            showError();
-        }
+        showError();
     }
-}
-
-/**
- * Muestra el panel de administración
- */
-function showAdminApp() {
-    loginContainer.classList.remove('active');
-    loginContainer.classList.add('hidden');
-    appContainer.classList.add('hidden');
-    appContainer.classList.remove('active');
-    
-    adminContainer.classList.remove('hidden');
-    adminContainer.classList.add('active');
-    
-    pinInput.value = '';
-    resetInactivityTimer();
 }
 
 /**
@@ -706,13 +630,9 @@ function showApp() {
  */
 function handleLogout() {
     sessionStorage.removeItem('authenticated');
-    sessionStorage.removeItem('admin_authenticated');
     
     appContainer.classList.remove('active');
     appContainer.classList.add('hidden');
-    
-    adminContainer.classList.remove('active');
-    adminContainer.classList.add('hidden');
     
     loginContainer.classList.remove('hidden');
     loginContainer.classList.add('active');
@@ -822,23 +742,7 @@ function renderTree(nodes, parentElement, onLeafClick) {
     parentElement.appendChild(ul);
 }
 
-/**
- * Carga la vista de administrador para subir el reporte de un nodo específico
- */
-function loadAdminReportForm(node) {
-    currentReportPath = node.path;
-    
-    // Modificar título del UI
-    const adminHeader = document.querySelector('#admin-container .content-header h2');
-    if (adminHeader) adminHeader.textContent = "Cargar Informe: " + node.name;
-    
-    const adminHeaderPath = document.querySelector('#admin-container .content-header p.path-subtitle');
-    if(adminHeaderPath) adminHeaderPath.textContent = "Ruta de subida: " + node.path;
-    
-    if (window.innerWidth <= 860) {
-        document.querySelector('#admin-container .sidebar').classList.add('mobile-collapsed');
-    }
-}
+
 
 /**
  * Carga el archivo HTML respectivo en el marco de visualización
@@ -853,12 +757,8 @@ function loadHtmlReport(node) {
     placeholder.classList.add('hidden');
     iframe.classList.remove('hidden');
     
-    // Definir la ruta local o a través de Google Docs Viewer para PDFs (evitando bloqueos CORS/iframes locales y celulares)
-    if (node.type === 'report-pdf') {
-        iframe.src = `https://docs.google.com/viewer?url=${encodeURIComponent(node.path)}&embedded=true`;
-    } else {
-        iframe.src = node.path;
-    }
+    // Cargar la ruta directamente para HTML y PDF (el navegador usará su visor nativo para ambos)
+    iframe.src = node.path;
     
     // Permitir apertura en nueva pestaña completa
     openNewTabBtn.disabled = false;
