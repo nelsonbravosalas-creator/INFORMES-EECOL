@@ -2,7 +2,7 @@
   {
     "tag": "21-STK.AC.001",
     "nombre": "GERENTE DE OPERACIONES",
-    "tipo": "",
+    "tipo": "Aire acondicionado",
     "marca": "ANWO",
     "modelo": "GES12E",
     "serie": "",
@@ -27,7 +27,7 @@
   {
     "tag": "21-STK.AC.002",
     "nombre": "AREA DE OPERACIONES",
-    "tipo": "",
+    "tipo": "Aire acondicionado",
     "marca": "ANWO",
     "modelo": "GES9E",
     "serie": "",
